@@ -58,3 +58,14 @@ The key detail: the notification goes to the song's **sharer**, not the playlist
 
 ---
 
+
+# Bug Hunt
+
+
+
+## Issue #1 — My listening streak keeps resetting
+
+- **How I reproduced it:** Ran `pytest tests/test_streaks.py::test_streak_increments_on_sunday` — it fails. A Saturday listen sets the streak to 1, then the next day (a Sunday) it stays 1 instead of going to 2.
+- **How I found the root cause:** Traced `POST /songs/<id>/listen` → `record_listening_event()` → `update_listening_streak()` in [services/streak_service.py](services/streak_service.py). The only weekday check in the function was on the "listened yesterday" branch, and Sunday was exactly the failing day.
+- **The root cause:** `datetime.weekday()` returns **6 for Sunday**. The branch was `elif days_since_last == 1 and today.weekday() != 6:`, which means "only increment if it's *not* Sunday." So any consecutive listen on a Sunday failed the check and fell to the `else`, resetting the streak to 1.
+- **Fix and side-effect check:** Removed the `and today.weekday() != 6` clause so it's just `elif days_since_last == 1:`. The same-day and multi-day-gap branches are unchanged.
