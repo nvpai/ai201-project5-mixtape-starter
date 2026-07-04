@@ -61,6 +61,8 @@ The key detail: the notification goes to the song's **sharer**, not the playlist
 
 # Bug Hunt
 
+I fixed **Issue #1 (streak resets), Issue #4 (no rating notification), and Issue #5 (last playlist song missing)**.
+
 
 
 ## Issue #1 — My listening streak keeps resetting
@@ -77,3 +79,16 @@ The key detail: the notification goes to the song's **sharer**, not the playlist
 - **How I found the root cause:** Compared the two write paths in [services/notification_service.py](services/notification_service.py). `add_to_playlist()` ends by calling `create_notification(...)`, but `rate_song()` saved the rating and returned with no notification step at all.
 - **The root cause:** `rate_song()` was missing the notification entirely. It saves the `Rating` correctly but never mirrors the "notify the original sharer" behavior that `add_to_playlist` already has.
 - **Fix and side-effect check:** After the rating commit, added a `create_notification(user_id=song.shared_by, notification_type="song_rated", body=...)` guarded by `if song.shared_by != user_id`, the same self-action guard `add_to_playlist` uses. Rating someone else's song now creates one `song_rated` notification; rating your own creates none.
+
+
+
+## Issue #5 — The last song in a playlist never shows up
+
+- **How I reproduced it:** Ran `pytest tests/test_playlists.py` — `test_playlist_returns_all_songs` and `test_playlist_returns_songs_in_order` both fail. A playlist with N songs returns N−1, and the missing one is always the last.
+- **How I found the root cause:** Traced `GET /playlists/<id>/songs` → `get_playlist_songs()` in [services/playlist_service.py](services/playlist_service.py). The query orders every entry by `position` correctly, so the loss had to be in the return line: `return [song.to_dict() for song in songs[:-1]]`.
+- **The root cause:** The comprehension iterated over `songs[:-1]` — "all songs except the last." Since the query is ordered by `position` ascending, this always dropped the highest-position song from the response.
+- **Fix and side-effect check:** Changed `songs[:-1]` to `songs` so the full ordered list is returned. Ordering is unchanged. Both playlist tests pass.
+
+## AI usage
+
+I used the AI assistant to trace the route → service call chains, run the test suite, and confirm each bug with a small reproduction before changing code. I read and confirmed each diagnosis in the source myself before accepting a fix.
