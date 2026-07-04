@@ -2,6 +2,15 @@
 
 Mixtape is a Flask + SQLAlchemy JSON API for a social music-sharing app: users share songs, build collaborative playlists, rate and listen to songs,and see what friends are listening to.
 
+## AI usage
+
+I used AI mainly for **navigation and debugging**
+
+- **Tracing call chains.** I asked the AI to follow each symptom from its route down to the service it calls — e.g. `POST /songs/<id>/listen` → `record_listening_event()` → `update_listening_streak()`, and `GET /playlists/<id>/songs` → `get_playlist_songs()`. This let me land in the right file quickly instead of reading all five services top to bottom.
+- **Explaining suspicious code.** Once I'd located a function, I had the AI explain edge cases — for example what `datetime.weekday()` returns for each day, which confirmed that `6` is Sunday and that the `weekday() != 6` check was the streak bug.
+- **Confirming bugs before fixing.** I used it to run the existing test suite and small reproduction snippets so I could see each bug fail *before* editing anything, per the reproduce-first discipline.
+- **Where I verified / overrode it.** I read and confirmed every diagnosis in the source myself before accepting a fix. One concrete catch: the project brief's example RCA describes the streak bug as `weekday() == 0`, but the actual code was `weekday() != 6`. Reading the real source kept me from documenting the wrong condition. The AI is good at explaining code I'd already found, but I treated its "the bug is probably here" guesses as leads to verify, not conclusions.
+
 ## Architecture
 
 Requests flow through three layers:
