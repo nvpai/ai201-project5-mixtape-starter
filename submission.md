@@ -48,13 +48,13 @@ A standalone script (`python seed_data.py`) that drops and recreates all tables,
 
 ## Data flow — adding a song to a playlist triggers a notification
 
-Example: darius adds sara's shared song to a playlist.
+Example: darius adds nova's shared song to a playlist.
 
 1. **Request:** `POST /playlists/<playlist_id>/songs` with body `{"song_id": ..., "added_by": <darius_id>}`.
 2. **Route** — `add_song()` in [routes/playlists.py](routes/playlists.py) reads `song_id` and `added_by`, returns 400 if either is missing, then calls `add_to_playlist(playlist_id, song_id, added_by)`.
 3. **Service** — `add_to_playlist()` in [services/notification_service.py](services/notification_service.py) loads and validates the song, the adding user, and the playlist, then appends the song to the playlist (writing a row into `playlist_entries`) and commits.
-4. **Notification trigger:** in the same function, if `song.shared_by != added_by_user_id` (you didn't add your own song), it calls `create_notification()` aimed at `song.shared_by` — the **original sharer**, sara — with a message like *"darius added your song 'X' to the playlist 'Y'."*
-5. **Read side:** sara later hits `GET /users/<id>/notifications`, which calls `get_notifications()` and returns her notifications newest-first.
+4. **Notification trigger:** in the same function, if `song.shared_by != added_by_user_id` (you didn't add your own song), it calls `create_notification()` aimed at `song.shared_by` — the **original sharer**, nova — with a message like *"darius added your song 'X' to the playlist 'Y'."*
+5. **Read side:** nova later hits `GET /users/<id>/notifications`, which calls `get_notifications()` and returns her notifications newest-first.
 
 The key detail: the notification goes to the song's **sharer**, not the playlist owner, and adding your own song is intentionally silent.
 
@@ -79,7 +79,7 @@ I fixed **Issue #1 (streak resets), Issue #4 (no rating notification), and Issue
 - **How I reproduced it:** Ran `pytest tests/test_streaks.py::test_streak_increments_on_sunday` — it fails. A Saturday listen sets the streak to 1, then the next day (a Sunday) it stays 1 instead of going to 2.
 - **How I found the root cause:** Traced `POST /songs/<id>/listen` → `record_listening_event()` → `update_listening_streak()` in [services/streak_service.py](services/streak_service.py). The only weekday check in the function was on the "listened yesterday" branch, and Sunday was exactly the failing day.
 - **The root cause:** `datetime.weekday()` returns **6 for Sunday**. The branch was `elif days_since_last == 1 and today.weekday() != 6:`, which means "only increment if it's *not* Sunday." So any consecutive listen on a Sunday failed the check and fell to the `else`, resetting the streak to 1.
-- **Fix and side-effect check:** Removed the `and today.weekday() != 6` clause so it's just `elif days_since_last == 1:`. The same-day and multi-day-gap branches are unchanged.
+- **Fix and side-effect check:** Removed the `and today.weekday() != 6` clause so it's just `elif days_since_last == 1:`. I left the same-day ("no change") and gap > 1 day ("reset to 1") branches untouched, and re-ran the full suite (13/13 pass) — specifically confirming the same-day and multi-day-gap streak tests still pass, so the fix only affects the consecutive-day case.
 
 
 ## Issue #4 — Notified when a friend adds my song to a playlist, but not when they rate it
@@ -101,3 +101,6 @@ I fixed **Issue #1 (streak resets), Issue #4 (no rating notification), and Issue
 ## AI usage
 
 I used the AI assistant to trace the route → service call chains, run the test suite, and confirm each bug with a small reproduction before changing code. I read and confirmed each diagnosis in the source myself before accepting a fix.
+
+## Screenshot of git log --oneline
+![alt text](/images/screenshot.png)
